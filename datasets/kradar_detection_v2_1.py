@@ -30,8 +30,8 @@ except:
 roi = [0,-16,-2,72,16,7.6]
 dict_cfg = dict(
     path_data = dict(
-        list_dir_kradar = ['/media/donghee/kradar/dataset'],
-        split = ['./resources/split/train.txt', './resources/split/test.txt'],
+        list_dir_kradar = ['/home/student/Documents/datasets/k-radar'],
+        split = ['./resources/split/train_1.txt', './resources/split/test_1.txt'],
         revised_label_v1_1 = './tools/revise_label/kradar_revised_label_v1_1',
         revised_label_v2_0 = './tools/revise_label/kradar_revised_label_v2_0/KRadar_refined_label_by_UWIPL',
         revised_label_v2_1 = './tools/revise_label/kradar_revised_label_v2_1/KRadar_revised_visibility',
@@ -60,10 +60,10 @@ dict_cfg = dict(
     ldr64 = dict(processed=False, skip_line=13, n_attr=9, inside_ldr64=True, calib=True,),
     rdr = dict(cube=False,),
     rdr_sparse = dict(processed=True, dir='/media/donghee/kradar/rdr_sparse_data/rtnh_wider_1p_1',),
-    rdr_polar_3d = dict(processed=True, dir='/media/donghee/kradar/rdr_polar_3d', in_pc100p=True),
+    rdr_polar_3d = dict(processed=True, dir='/home/student/Documents/datasets/k-radar/RadarTensor/rdr_polar_3d', in_pc100p=True),
     roi = dict(filter=False, xyz=roi, keys=['ldr64', 'rdr_sparse'], check_azimuth_for_rdr=True, azimuth_deg=[-53,53]),
     rpcs = dict(processed=True, dir='/media/donghee/kradar/rdr_pc', keys=['pc1p', 'pc10p']),
-    portion = ['10'], # ['7', '8'],
+    portion = ['1'], # ['7', '8'],
 )
 
 class KRadarDetection_v2_1(Dataset):
@@ -165,13 +165,16 @@ class KRadarDetection_v2_1(Dataset):
             for line in lines:
                 seq, label = line.split(',')
                 list_dict_split[int(seq)][label.rstrip('\n')] = val
+        print('xxx ', path_data)
         list_dict_split = [dict() for _ in range(58+1)]
         get_split(path_data.split[0], list_dict_split, 'train')
         get_split(path_data.split[1], list_dict_split, 'test')
+        #print('yyy ', list_dict_split)
         
         list_seqs_w_header = []
         for path_header in path_data.list_dir_kradar:
             list_seqs = os.listdir(path_header)
+            print('zzz ', list_seqs)
             if self.portion is None:
                 list_seqs_w_header.extend([(seq, path_header) for seq in list_seqs])
             else:
@@ -213,6 +216,7 @@ class KRadarDetection_v2_1(Dataset):
     
     def load_physical_values(self, is_in_rad=True, is_with_doppler=False):
         temp_values = loadmat('./resources/info_arr.mat')
+        print("info_arr ", temp_values)
         arr_range = temp_values['arrRange']
         if is_in_rad:
             deg2rad = np.pi/180.
@@ -568,16 +572,33 @@ class KRadarDetection_v2_1(Dataset):
         seq = dict_item['meta']['seq']
         rdr_idx = dict_item['meta']['idx']['rdr']
         path_tesseract = osp.join(dict_item['meta']['header'],seq,'radar_tesseract',f'tesseract_{rdr_idx}.mat')            
+        print("rrr tesseract ", path_tesseract)
         arr_tesseract = loadmat(path_tesseract)['arrDREA']
         arr_tesseract = np.transpose(arr_tesseract, (0, 1, 3, 2)) # DRAE
+
+        print("rrr tesseract ", path_tesseract, arr_tesseract.shape)
         dict_item['tesseract'] = arr_tesseract
 
         return dict_item
     
-    def get_cube_polar(self, dict_item, normalizer=1e+13):
+    def get_cube_polar(self, dict_item, normalizer=1e+13, dopindex=65):
         dict_item = self.get_tesseract(dict_item)
-        tesseract = dict_item['tesseract'][1:,:,:,:]/normalizer
-        cube_pw = np.mean(tesseract, axis=0, keepdims=False)
+        if dopindex < 65:
+            tesseract = dict_item['tesseract'][dopindex,:,:,:]/normalizer
+        elif dopindex ==65:
+            tesseract = dict_item['tesseract'][1:,:,:,:]/normalizer
+        elif dopindex == 66:
+            tesseract = dict_item['tesseract'][0:,:,:,:]/normalizer
+        else:
+            tesseract = dict_item['tesseract'][1:,:,:,:]/normalizer
+        tesseract_1 = dict_item['tesseract'][1:,:,:,:]/normalizer
+        print('tesseract ', tesseract.shape)
+
+        if dopindex==65 or dopindex==66:
+            cube_pw = np.mean(tesseract, axis=0, keepdims=False)
+        else:
+            cube_pw = tesseract
+        print('cube_pw ', cube_pw.shape)
 
         # (1) softmax (not used: overflow)    
         # tesseract_exp = np.exp(tesseract)
@@ -585,8 +606,8 @@ class KRadarDetection_v2_1(Dataset):
         # tesseract_dist = tesseract_exp/tesseract_exp_sum
 
         # (2) sum
-        tesseract_sum = np.repeat(np.sum(tesseract, axis=0, keepdims=True), 63, axis=0)
-        tesseract_dist = tesseract/tesseract_sum
+        tesseract_sum = np.repeat(np.sum(tesseract_1, axis=0, keepdims=True), 63, axis=0)
+        tesseract_dist = tesseract_1/tesseract_sum
 
         tesseract_dop = np.reshape(self.arr_doppler[1:], (63,1,1,1)).repeat(256,1).repeat(107,2).repeat(37,3)
         cube_dop = np.sum(tesseract_dist*tesseract_dop, axis=0, keepdims=False)
@@ -596,7 +617,7 @@ class KRadarDetection_v2_1(Dataset):
 
         return dict_item
     
-    def save_polar_3d(self, root_path='/media/donghee/kradar/rdr_polar_3d', idx_start=3500, idx_end=4605):
+    def save_polar_3d(self, root_path='/home/student/Documents/datasets/k-radar/RadarTensor/rdr_polar_3d/new_all', idx_start=30, idx_end=32):
         for seq_name in range(58):
             seq_folder = osp.join(root_path, f'{seq_name+1}')
             os.makedirs(seq_folder, exist_ok=True)
@@ -616,20 +637,25 @@ class KRadarDetection_v2_1(Dataset):
                 dict_meta = dict_item['meta']
                 seq_name = dict_meta['seq']
                 rdr_idx = dict_meta['idx']['rdr']
-
-                path_polar_3d = osp.join(root_path, seq_name, f'polar3d_{rdr_idx}.npy')
-                if os.path.exists(path_polar_3d):
-                    continue
-
-                dict_item = self.get_cube_polar(dict_item)
                 
-                cube_pw = dict_item['cube_pw_polar']
-                cube_dop = dict_item['cube_dop_cartesian']
-                cube_polar = np.stack((cube_pw, cube_dop), axis=0)
-                # cube_polar = cube_polar.astype(np.float32)
-                # print(cube_polar.shape)
+                for dopindex in range(65):
+                    #index 65 for original 1:, index 66 for 0:
+
+                    path_polar_3d = osp.join(root_path, seq_name, f'polar3d_{rdr_idx}_{dopindex}.npy')
+                    print("xyyy ", path_polar_3d, dict_item.keys())
+                    #if os.path.exists(path_polar_3d):
+                    #    continue
+
+                    dict_item = self.get_cube_polar(dict_item, dopindex=dopindex)
                 
-                np.save(path_polar_3d, cube_polar)
+                    cube_pw = dict_item['cube_pw_polar']
+                    cube_dop = dict_item['cube_dop_cartesian']
+                    cube_polar = np.stack((cube_pw, cube_dop), axis=0)
+                    # cube_polar = cube_polar.astype(np.float32)
+                    # print(cube_polar.shape)
+                    print("xxxyyy ", path_polar_3d, cube_polar.shape)
+                
+                    np.save(path_polar_3d, cube_polar)
 
                 # free memory (Killed error, checked with htop)
                 for k in dict_item.keys():
@@ -1119,19 +1145,25 @@ if __name__ == '__main__':
     ### Camera calibration ###
 
     ### Save rdr polar 3d ###
-    # kradar_detection.save_polar_3d()
+    kradar_detection.save_polar_3d()
     ### Save rdr polar 3d ###
 
+    dict_item= kradar_detection.get_rdr_polar_3d(dict_item)
     ### Range-wise proportional rdr points ###
-    # dict_item = kradar_detection.get_proportional_rdr_points(dict_item) # pc100p=False
-    # dict_item = kradar_detection.get_proportional_rdr_points_from_pc100p(dict_item)
+    #dict_item = kradar_detection.get_proportional_rdr_points(dict_item) # pc100p=False
+    dict_item = kradar_detection.get_proportional_rdr_points_from_pc100p(dict_item)
     ### Range-wise proportional rdr points ###
 
-    # print(dict_item['rdr_sparse'].shape)
-    # print(dict_item['rdr_pc'].shape)
+    #print(dict_item['rdr_sparse'].shape)
+    print(dict_item['rdr_pc'].shape)
+    drae_values = loadmat('/home/student/Documents/datasets/k-radar/1/radar_tesseract/tesseract_00012.mat')
+    print(f" radar drae  {drae_values['arrDREA'].shape}")
+    zyx_values = loadmat('/home/student/Documents/datasets/k-radar/1/radar_zyx_cube/cube_00012.mat')
+    print(f" zyx_cube {zyx_values['arr_zyx'].shape}")
 
     ### Vis ###
-    # kradar_detection.vis_in_open3d(dict_item, ['ldr64', 'label', 'rdr_pc']) # 'rdr_pc', 'rdr_sparse'
+
+    #kradar_detection.vis_in_open3d(dict_item, ['ldr64', 'label', 'rdr_pc']) # 'rdr_pc', 'rdr_sparse'
     ### Vis ###
 
     ### Save rdr pc ###
