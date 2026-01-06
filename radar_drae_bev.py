@@ -1,5 +1,4 @@
-# read radar rdr_polar_3d npy_file, save range-angle bev 
-
+# read radar drae 4d tensor matlab mat file, save range-angle bev 
 import argparse
 import os
 import numpy as np
@@ -7,20 +6,25 @@ import scipy.io
 import matplotlib.pyplot as plt
 
 
-def compute_bev(arr_rae: np.ndarray) -> np.ndarray:
+def compute_bev(arr_rea: np.ndarray) -> np.ndarray:
     """
-    Compute BEV (Bird's Eye View) image from arr_rae (r,a, e).
+    Compute BEV (Bird's Eye View) image from arr_rea (r, e, a).
 
+    MATLAB intent:
+      - Iterate over y,x
+      - Sum valid Z values
+      - Ignore values == -1 or < 0
       - Take mean
     """
-    r, a, e = arr_rae.shape
+    # arr_zyx shape: (Z, Y, X)
+    r, e, a = arr_rea.shape
 
     # Mark invalid values (negative or -1) as NaN so they are ignored in mean
-    arr = arr_rae.astype(np.float32)
+    arr = arr_rea.astype(np.float32)
     arr[arr < 0] = np.nan
 
     # Mean over elevation axis ignoring NaNs
-    bev = np.nanmean(arr, axis=2)  # shape: (Y, X)
+    bev = np.nanmean(arr, axis=1)  # shape: (Y, X)
     print(f"bev.shape {bev.shape}")
 
     # Replace NaN (where all Z were invalid) with 0
@@ -35,7 +39,7 @@ def save_bev_image(bev: np.ndarray, out_path: str, use_log: bool = True):
     MATLAB used 10*log10(new_arr_xy) when plotting.
     """
     img = bev.copy()
-    print(f"img.shape {img.shape} {use_log}")
+    print(f"img.shape {img.shape}")
 
     if use_log:
         # Avoid log(0)
@@ -53,56 +57,39 @@ def save_bev_image(bev: np.ndarray, out_path: str, use_log: bool = True):
     plt.savefig(out_path, dpi=50)
     plt.close()
 
-def do_dir(dirname):
-    import os
-    data = {}
-    for fname in os.listdir(dirname):
-        if fname.endswith(".npy"):
-            path = os.path.join(dirname, fname)
-            key = os.path.splitext(fname)[0]  # filename without .npy
-            data = np.load(path)
-
-            print(f"max/min {np.max(data)} / {np.min(data)}")
-
-            arr_rae = data[0]
-            if arr_rae.ndim != 3:
-                raise ValueError(f"must be 3D. Got shape: {arr_rae.shape}")
-            bev = compute_bev(arr_rae)
-
-            base, _ = os.path.splitext(path)
-            out_path = base.split('/')[-1] + "_bev.png"
-            save_bev_image(bev, out_path, use_log=True)
-
 
 def main():
     parser = argparse.ArgumentParser(description="Generate BEV image from MATLAB arr_drae tensor.")
-    parser.add_argument("--polar_file", default="/home/student/Documents/datasets/k-radar/RadarTensor/rdr_polar_3d/1/polar3d_00319.npy", help="Path to .mat file containing variable arrDREA")
+    parser.add_argument("--mat_file", default="/home/student/Documents/datasets/k-radar/1/radar_tesseract/tesseract_00417.mat", help="Path to .mat file containing variable arrDREA")
     parser.add_argument("--out", default=None, help="Output PNG path (default: same name + _bev.png)")
     parser.add_argument("--no-log", action="store_true", help="Do not apply 10*log10 scaling")
     parser.add_argument("--show", action="store_true", help="Display image interactively")
     args = parser.parse_args()
 
-    polar_file = args.polar_file
-    if os.path.isdir(polar_file):
-        do_dir(polar_file)
-        return
+    mat_file = args.mat_file
+    data = scipy.io.loadmat(mat_file)
+    print(f"data.keys {data.keys()}")
 
-    data = np.load(polar_file)
+    if "arrDREA" not in data:
+        raise KeyError(f"MAT file does not contain 'arr_zyx'. Keys found: {list(data.keys())}")
 
-    arr_rae = data[0]
-    if arr_rae.ndim != 3:
-        raise ValueError(f"must be 3D. Got shape: {arr_rae.shape}")
-    bev = compute_bev(arr_rae)
+    arr_drea = data["arrDREA"]
+    if arr_drea.ndim != 4:
+        raise ValueError(f"arr_zyx must be 3D. Got shape: {arr_zyx.shape}")
+
+    # arr_zyx.shape (150, 400, 250)
+    
+    bev = compute_bev(arr_drea[0])
 
     if args.out is None:
-        base, _ = os.path.splitext(polar_file)
+        base, _ = os.path.splitext(mat_file)
         out_path = base.split('/')[-1] + "_bev.png"
     else:
         out_path = args.out
 
-    save_bev_image(bev, out_path, use_log=True)
+    save_bev_image(bev, out_path, use_log=(not args.no_log))
 
-    print(f"Saved BEV image to: {out_path}, arr_rae.shape {arr_rae.shape} arr_drea {arr_rae[0:10,0]}")
+    print(f"Saved BEV image to: {out_path}, arr_drea.shape {arr_drea.shape} arr_drea[0] {arr_drea[0:10,200,80:180]}")
 
     if args.show:
         # Re-display image

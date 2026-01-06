@@ -581,20 +581,20 @@ class KRadarDetection_v2_1(Dataset):
 
         return dict_item
     
-    def get_cube_polar(self, dict_item, normalizer=1e+13, dopindex=65):
+    def get_cube_polar(self, dict_item, normalizer=1e+10, dopindex=64):
         dict_item = self.get_tesseract(dict_item)
-        if dopindex < 65:
+        if dopindex < 64:
             tesseract = dict_item['tesseract'][dopindex,:,:,:]/normalizer
-        elif dopindex ==65:
+        elif dopindex ==64:
             tesseract = dict_item['tesseract'][1:,:,:,:]/normalizer
-        elif dopindex == 66:
+        elif dopindex == 65:
             tesseract = dict_item['tesseract'][0:,:,:,:]/normalizer
         else:
             tesseract = dict_item['tesseract'][1:,:,:,:]/normalizer
         tesseract_1 = dict_item['tesseract'][1:,:,:,:]/normalizer
         print('tesseract ', tesseract.shape)
 
-        if dopindex==65 or dopindex==66:
+        if dopindex==65 or dopindex==64:
             cube_pw = np.mean(tesseract, axis=0, keepdims=False)
         else:
             cube_pw = tesseract
@@ -608,9 +608,12 @@ class KRadarDetection_v2_1(Dataset):
         # (2) sum
         tesseract_sum = np.repeat(np.sum(tesseract_1, axis=0, keepdims=True), 63, axis=0)
         tesseract_dist = tesseract_1/tesseract_sum
+        print('cube_pw 1 ', cube_pw.shape)
 
         tesseract_dop = np.reshape(self.arr_doppler[1:], (63,1,1,1)).repeat(256,1).repeat(107,2).repeat(37,3)
+        print('cube_pw 2 ', cube_pw.shape)
         cube_dop = np.sum(tesseract_dist*tesseract_dop, axis=0, keepdims=False)
+        print('cube_pw 3 ', cube_pw.shape)
         
         dict_item['cube_pw_polar'] = cube_pw
         dict_item['cube_dop_cartesian'] = cube_dop
@@ -638,8 +641,8 @@ class KRadarDetection_v2_1(Dataset):
                 seq_name = dict_meta['seq']
                 rdr_idx = dict_meta['idx']['rdr']
                 
-                for dopindex in range(65):
-                    #index 65 for original 1:, index 66 for 0:
+                for dopindex in range(66):
+                    #index 64 for original 1:, index 65 for 0:
 
                     path_polar_3d = osp.join(root_path, seq_name, f'polar3d_{rdr_idx}_{dopindex}.npy')
                     print("xyyy ", path_polar_3d, dict_item.keys())
