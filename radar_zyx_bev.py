@@ -1,3 +1,9 @@
+# read zyx_cub /.mat, save as png. the zyx don't have doppler channel
+# zyx shape (150, 400, 250)
+# zyx max: 5e15, min: -1 for out of fov
+# https://github.com/juwangvsu/K-Radar/blob/main/tools/mfiles/gen_3_get_zyx_cube.m
+# mean dopller, bilinear interp
+
 import argparse
 import os
 import numpy as np
@@ -17,6 +23,7 @@ def compute_bev(arr_zyx: np.ndarray) -> np.ndarray:
     """
     # arr_zyx shape: (Z, Y, X)
     z, y, x = arr_zyx.shape
+    print(f"arr_zyx.shape {arr_zyx.shape}")
 
     # Mark invalid values (negative or -1) as NaN so they are ignored in mean
     arr = arr_zyx.astype(np.float32)
@@ -28,6 +35,8 @@ def compute_bev(arr_zyx: np.ndarray) -> np.ndarray:
     # Replace NaN (where all Z were invalid) with 0
     bev = np.nan_to_num(bev, nan=0.0)
 
+    bev= bev/1e11
+
     return bev
 
 
@@ -37,7 +46,7 @@ def save_bev_image(bev: np.ndarray, out_path: str, use_log: bool = True):
     MATLAB used 10*log10(new_arr_xy) when plotting.
     """
     img = bev.copy()
-    print(f"img.shape {img.shape}")
+    print(f"img.shape {img.shape}, use_log {use_log}")
 
     if use_log:
         # Avoid log(0)
@@ -52,13 +61,13 @@ def save_bev_image(bev: np.ndarray, out_path: str, use_log: bool = True):
     plt.ylabel("Y")
 
     plt.tight_layout()
-    plt.savefig(out_path, dpi=50)
+    plt.savefig(out_path, dpi=100)
     plt.close()
 
 
 def main():
     parser = argparse.ArgumentParser(description="Generate BEV image from MATLAB arr_zyx cube.")
-    parser.add_argument("--mat_file", default="/tmp/cube_00012.mat", help="Path to .mat file containing variable arr_zyx")
+    parser.add_argument("--mat_file", default="/home/student/Documents/datasets/k-radar/radar_zyx_cube/cube_00012.mat", help="Path to .mat file containing variable arr_zyx")
     parser.add_argument("--out", default=None, help="Output PNG path (default: same name + _bev.png)")
     parser.add_argument("--no-log", action="store_true", help="Do not apply 10*log10 scaling")
     parser.add_argument("--show", action="store_true", help="Display image interactively")
@@ -80,14 +89,14 @@ def main():
 
     if args.out is None:
         base, _ = os.path.splitext(mat_file)
+        base = base.split('/')[-1]
         out_path = base + "_bev.png"
     else:
         out_path = args.out
 
-    save_bev_image(bev, out_path, use_log=(not args.no_log))
+    save_bev_image(bev, out_path, use_log=True)
 
-    print(f"Saved BEV image to: {out_path}, arr_zyx.shape {arr_zyx.shape} arr_zyx[0] {arr_zyx[0:10,200,80:180]}")
-    print(f"Saved BEV image to: {out_path}, arr_zyx.shape {arr_zyx.shape} arr_zyx[0] {arr_zyx[10:20,200,80:180]}")
+    print(f"Saved BEV image to: {out_path}, arr_zyx.shape {arr_zyx.shape} max arr_zyx {np.max(arr_zyx, axis=1)}")
 
     if args.show:
         # Re-display image

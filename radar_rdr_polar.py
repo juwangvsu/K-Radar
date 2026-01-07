@@ -1,4 +1,15 @@
 # read radar rdr_polar_3d npy_file, save range-angle bev 
+# npy shape (2,256,107,37) channel 1 is pw. ch 2 is dopper
+# pw is mean over doppler channel 1:63. pw is already normalized and log db?
+# pw max 74 (db) min ~ 0 (db)
+# use_log True plot seems better
+# radar_zyx_cube/cube_00621.mat  raw pw measurement, unlogged, -1 for out of fov, otherwise range from single digit to 1e12, dynamic range about 50db
+# radar_tesseract/tesseract_00621.mat raw pw measurement, unloged
+# radar_bev_image/radar_bev_100_00621.png
+
+# processed:
+# RadarTensor/rdr_polar_3d/polar3d_00621.npy stock max 74.06, min 0.00033, alread in db? most likely normalized but not logged since the min value is not negative. if logged, will probably see some negative db value. 
+# RadarTensor/rdr_polar_3d/new_all/1/polar3d_00621.npy local gen,  
 
 import argparse
 import os
@@ -40,6 +51,7 @@ def save_bev_image(bev: np.ndarray, out_path: str, use_log: bool = True):
     if use_log:
         # Avoid log(0)
         img = 10.0 * np.log10(np.maximum(img, 1e-12))
+    print(f"img max/min {np.max(img)} / {np.min(img)}")
 
     #plt.figure(figsize=(10, 6))
     #plt.figure()
@@ -71,14 +83,14 @@ def do_dir(dirname):
 
             base, _ = os.path.splitext(path)
             out_path = base.split('/')[-1] + "_bev.png"
-            save_bev_image(bev, out_path, use_log=True)
+            save_bev_image(bev, out_path, use_log=False)
 
 
 def main():
     parser = argparse.ArgumentParser(description="Generate BEV image from MATLAB arr_drae tensor.")
     parser.add_argument("--polar_file", default="/home/student/Documents/datasets/k-radar/RadarTensor/rdr_polar_3d/1/polar3d_00319.npy", help="Path to .mat file containing variable arrDREA")
     parser.add_argument("--out", default=None, help="Output PNG path (default: same name + _bev.png)")
-    parser.add_argument("--no-log", action="store_true", help="Do not apply 10*log10 scaling")
+    parser.add_argument("--use_log", action="store_true", help="Do not apply 10*log10 scaling")
     parser.add_argument("--show", action="store_true", help="Display image interactively")
     args = parser.parse_args()
 
@@ -100,9 +112,9 @@ def main():
     else:
         out_path = args.out
 
-    save_bev_image(bev, out_path, use_log=True)
+    save_bev_image(bev, out_path, use_log=args.use_log)
 
-    print(f"Saved BEV image to: {out_path}, arr_rae.shape {arr_rae.shape} arr_drea {arr_rae[0:10,0]}")
+    print(f"Saved BEV image to: {out_path}, arr_rae.shape {arr_rae.shape} arr_drea {arr_rae[0:10,0,0]}")
 
     if args.show:
         # Re-display image

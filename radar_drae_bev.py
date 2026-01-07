@@ -1,9 +1,19 @@
-# read radar drae 4d tensor matlab mat file, save range-angle bev 
+# read radar drae 4d tensor matlab mat file, 
+# save range-angle bev, only using doppler ch 0, then mean over elevation
+# save zyx cube, channel mean over dopplar 1:63,
+# resultant zyx is pw measurement, unlogged.
+
 import argparse
 import os
 import numpy as np
 import scipy.io
 import matplotlib.pyplot as plt
+
+def compute_zyx(arr_drea: np.ndarray) -> np.ndarray:
+    arr = arr_rea.astype(np.float32)
+
+
+    arr[arr < 0] = np.nan
 
 
 def compute_bev(arr_rea: np.ndarray) -> np.ndarray:
@@ -77,6 +87,7 @@ def main():
     if arr_drea.ndim != 4:
         raise ValueError(f"arr_zyx must be 3D. Got shape: {arr_zyx.shape}")
 
+    zyx = compute_zyx(arr_drea)
     # arr_zyx.shape (150, 400, 250)
     
     bev = compute_bev(arr_drea[0])
