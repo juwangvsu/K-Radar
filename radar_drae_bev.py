@@ -15,6 +15,31 @@ def compute_zyx(arr_drea: np.ndarray) -> np.ndarray:
 
     arr[arr < 0] = np.nan
 
+def save_png(fn, img, use_log=False):
+    plt.imshow(img, origin="lower", aspect="equal")
+    plt.colorbar(label="Power (dB)" if use_log else "Mean Power")
+    plt.title("BEV Image (Mean along Z-axis)")
+    plt.xlabel("X")
+    plt.ylabel("Y")
+
+    plt.tight_layout()
+    plt.savefig(fn, dpi=50)
+    plt.close()
+
+#save rdr range angel 3d tensor, save to 37 slice as png imgs
+def compute_rdr(fname, arr_drea: np.ndarray) -> np.ndarray:
+    cube_pw = np.mean(arr_drea[1:,:,:,:], axis=0, keepdims=False)
+    np.save(fname, cube_pw)
+    print(f"cube_pw.shape {cube_pw.shape}")
+
+    for i in range(37):
+        rdr_slice = cube_pw[:,i,:]
+        rdr_log = 10*np.log10(rdr_slice)
+        pngfn = fname.split('.')[0]+'_'+str(i)+'.png'
+        pngfndb = fname.split('.')[0]+'_db_'+str(i)+'.png'
+        save_png(pngfndb, rdr_log, use_log=True)
+        save_png(pngfn, rdr_slice, use_log=False)
+
 
 def compute_bev(arr_rea: np.ndarray) -> np.ndarray:
     """
@@ -74,6 +99,7 @@ def main():
     parser.add_argument("--out", default=None, help="Output PNG path (default: same name + _bev.png)")
     parser.add_argument("--no-log", action="store_true", help="Do not apply 10*log10 scaling")
     parser.add_argument("--show", action="store_true", help="Display image interactively")
+    parser.add_argument("--demo", action="store_true", help="save image slice")
     args = parser.parse_args()
 
     mat_file = args.mat_file
@@ -87,7 +113,6 @@ def main():
     if arr_drea.ndim != 4:
         raise ValueError(f"arr_zyx must be 3D. Got shape: {arr_zyx.shape}")
 
-    zyx = compute_zyx(arr_drea)
     # arr_zyx.shape (150, 400, 250)
     
     bev = compute_bev(arr_drea[0])
@@ -95,6 +120,7 @@ def main():
     if args.out is None:
         base, _ = os.path.splitext(mat_file)
         out_path = base.split('/')[-1] + "_bev.png"
+        rdrout_path = base.split('/')[-1] + "_rdr.npy"
     else:
         out_path = args.out
 
@@ -111,6 +137,9 @@ def main():
         plt.title("BEV Image (Mean along Z-axis)")
         plt.show()
 
+    if args.demo:
+        #zyx = compute_zyx(arr_drea)
+        rdr = compute_rdr(rdrout_path, arr_drea)
 
 if __name__ == "__main__":
     main()
