@@ -1,6 +1,7 @@
 # read zyx_cub /.mat, save as png. the zyx don't have doppler channel
 # zyx shape (150, 400, 250)
 # zyx max: 5e15, min: -1 for out of fov
+# z index 70 crosspond to 0-meter height. z[0] correspond to -30 degree in elevation. this also explain the blackout area of the generated bev img.
 # https://github.com/juwangvsu/K-Radar/blob/main/tools/mfiles/gen_3_get_zyx_cube.m
 # mean dopller, bilinear interp
 
@@ -10,8 +11,19 @@ import numpy as np
 import scipy.io
 import matplotlib.pyplot as plt
 
+def show_stat(arr_zyx: np.ndarray) -> np.ndarray:
 
-def compute_bev(arr_zyx: np.ndarray) -> np.ndarray:
+    # arr_zyx shape: (Z, Y, X)
+    z, y, x = arr_zyx.shape
+    arr_10 = arr_zyx[:,:,:].reshape(-1) 
+    arr_10 = arr_10[arr_10>0]
+    print(f"pw range {np.max(arr_10)} {np.min(arr_10)} {np.max(arr_10)/np.min(arr_10)}")
+    for i in range(150):
+        arr_10 = arr_zyx[i,:,:].reshape(-1) 
+        arr_10 = arr_10[arr_10>0]
+        print(f"z-slice {i} arr_zyx.shape {arr_zyx.shape} max {np.max(arr_10)} {np.min(arr_10)} maxrange {np.max(arr_10)/np.min(arr_10)}")
+
+def compute_bev(arr_zyx: np.ndarray, ind=-1) -> np.ndarray:
     """
     Compute BEV (Bird's Eye View) image from arr_zyx (Z, Y, X).
 
@@ -23,19 +35,25 @@ def compute_bev(arr_zyx: np.ndarray) -> np.ndarray:
     """
     # arr_zyx shape: (Z, Y, X)
     z, y, x = arr_zyx.shape
-    print(f"arr_zyx.shape {arr_zyx.shape}")
-
+    arr_10 = arr_zyx[:,:,:].reshape(-1) 
+    arr_10 = arr_10[arr_10>0]
+    print(f"pw range {np.max(arr_10)} {np.min(arr_10)} {np.max(arr_10)/np.min(arr_10)}")
     # Mark invalid values (negative or -1) as NaN so they are ignored in mean
+
     arr = arr_zyx.astype(np.float32)
     arr[arr < 0] = np.nan
 
     # Mean over Z axis ignoring NaNs
-    bev = np.nanmean(arr, axis=0)  # shape: (Y, X)
+    if ind==-1:
+        bev = np.nanmean(arr, axis=0)  # shape: (Y, X)
+    else:
+        bev = arr[ind]  # shape: (Y, X)
+    #bev = np.nanmean(arr, axis=0)  # shape: (Y, X)
 
     # Replace NaN (where all Z were invalid) with 0
     bev = np.nan_to_num(bev, nan=0.0)
 
-    bev= bev/1e11
+    bev= bev/1e10
 
     return bev
 
@@ -54,7 +72,7 @@ def save_bev_image(bev: np.ndarray, out_path: str, use_log: bool = True):
 
     #plt.figure(figsize=(10, 6))
     #plt.figure()
-    plt.imshow(img, origin="lower", aspect="equal")
+    plt.imshow(img, origin="lower", aspect="equal", vmin=0, vmax=180)
     plt.colorbar(label="Power (dB)" if use_log else "Mean Power")
     plt.title("BEV Image (Mean along Z-axis)")
     plt.xlabel("X")
@@ -67,7 +85,7 @@ def save_bev_image(bev: np.ndarray, out_path: str, use_log: bool = True):
 
 def main():
     parser = argparse.ArgumentParser(description="Generate BEV image from MATLAB arr_zyx cube.")
-    parser.add_argument("--mat_file", default="/home/student/Documents/datasets/k-radar/radar_zyx_cube/cube_00012.mat", help="Path to .mat file containing variable arr_zyx")
+    parser.add_argument("--mat_file", default="/home/student/Documents/datasets/k-radar/radar_zyx_cube/cube_00417.mat", help="Path to .mat file containing variable arr_zyx")
     parser.add_argument("--out", default=None, help="Output PNG path (default: same name + _bev.png)")
     parser.add_argument("--no-log", action="store_true", help="Do not apply 10*log10 scaling")
     parser.add_argument("--show", action="store_true", help="Display image interactively")
@@ -84,19 +102,17 @@ def main():
         raise ValueError(f"arr_zyx must be 3D. Got shape: {arr_zyx.shape}")
 
     # arr_zyx.shape (150, 400, 250)
-    
-    bev = compute_bev(arr_zyx)
+    show_stat(arr_zyx)
+    for ind in range(-1,140,10): 
+        bev = compute_bev(arr_zyx, ind=ind)
 
-    if args.out is None:
         base, _ = os.path.splitext(mat_file)
         base = base.split('/')[-1]
-        out_path = base + "_bev.png"
-    else:
-        out_path = args.out
+        out_path = base + f"_bev_{ind}.png"
 
-    save_bev_image(bev, out_path, use_log=True)
+        save_bev_image(bev, out_path, use_log=False)
 
-    print(f"Saved BEV image to: {out_path}, arr_zyx.shape {arr_zyx.shape} max arr_zyx {np.max(arr_zyx, axis=1)}")
+        print(f"Saved BEV image to: {out_path}, arr_zyx.shape {arr_zyx.shape} ")
 
     if args.show:
         # Re-display image
