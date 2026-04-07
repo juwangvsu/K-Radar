@@ -1,5 +1,9 @@
 
 
+--------------- 4/6/26 more readme  ------------------
+
+see seg_deeplabv3/readme_kradar.txt
+
 --------------- 3/31/26 code repo ------------------
 alien3
 	~/Documents/K-Radar
