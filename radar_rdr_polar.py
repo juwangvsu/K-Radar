@@ -40,6 +40,20 @@ def compute_bev(arr_rae: np.ndarray) -> np.ndarray:
     return bev
 
 
+def save_bev_npy(bev: np.ndarray, out_path: str, use_log: bool = True):
+    """
+    Save BEV as npy.
+    MATLAB used 10*log10(new_arr_xy) when plotting.
+    """
+    ra_npy = bev.copy()
+    print(f"ra_npy.shape {ra_npy.shape} {use_log}")
+
+    if use_log:
+        # Avoid log(0)
+        ra_npy = 10.0 * np.log10(np.maximum(ra_npy, 1e-12))
+    print(f" max/min {np.max(ra_npy)} / {np.min(ra_npy)} saved to {out_path}")
+    np.save(out_path,ra_npy)
+
 def save_bev_image(bev: np.ndarray, out_path: str, use_log: bool = True):
     """
     Save BEV as image.
@@ -51,7 +65,7 @@ def save_bev_image(bev: np.ndarray, out_path: str, use_log: bool = True):
     if use_log:
         # Avoid log(0)
         img = 10.0 * np.log10(np.maximum(img, 1e-12))
-    print(f"img max/min {np.max(img)} / {np.min(img)}")
+    print(f"img max/min {np.max(img)} / {np.min(img)} saved to {out_path}")
 
     #plt.figure(figsize=(10, 6))
     #plt.figure()
@@ -67,10 +81,14 @@ def save_bev_image(bev: np.ndarray, out_path: str, use_log: bool = True):
 
 def do_dir(dirname):
     import os
+    from pathlib import Path
     data = {}
     for fname in os.listdir(dirname):
         if fname.endswith(".npy"):
+            p_dirname = Path(dirname).parent
             path = os.path.join(dirname, fname)
+            path_png = os.path.join(p_dirname, 'angle_range_png', fname)
+            path_ra = os.path.join(p_dirname, 'angle_range_numpy', fname)
             key = os.path.splitext(fname)[0]  # filename without .npy
             data = np.load(path)
 
@@ -81,9 +99,13 @@ def do_dir(dirname):
                 raise ValueError(f"must be 3D. Got shape: {arr_rae.shape}")
             bev = compute_bev(arr_rae)
 
-            base, _ = os.path.splitext(path)
-            out_path = base.split('/')[-1] + "_bev.png"
+            base, _ = os.path.splitext(path_png)
+            base_ra, _ = os.path.splitext(path_ra)
+            out_path = base + "_bev.png"
+            #out_path = base.split('/')[-1] + "_bev.png"
             save_bev_image(bev, out_path, use_log=False)
+            ra_out_path = base_ra + "_bev.npy"
+            save_bev_npy(bev, ra_out_path, use_log=False)
 
 
 def main():
